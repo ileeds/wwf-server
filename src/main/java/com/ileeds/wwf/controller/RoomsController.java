@@ -5,8 +5,10 @@ import com.ileeds.wwf.model.post.RoomPost;
 import com.ileeds.wwf.model.response.RestResponse;
 import com.ileeds.wwf.model.response.RoomResponse;
 import com.ileeds.wwf.service.RoomService;
+import javax.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/rooms")
+@Validated
 public class RoomsController {
 
   @Autowired
@@ -33,7 +36,7 @@ public class RoomsController {
   }
 
   @PostMapping
-  public RestResponse<RoomResponse> postRoom(@RequestBody RoomPost roomPost) {
+  public RestResponse<RoomResponse> postRoom(@Valid @RequestBody RoomPost roomPost) {
     final RoomCached roomCached;
     try {
       roomCached = this.roomService.createRoom(roomPost);

@@ -1,6 +1,7 @@
 package com.ileeds.wwf.service;
 
 import com.ileeds.wwf.model.cache.PlayerCached;
+import com.ileeds.wwf.model.post.PlayerPatch;
 import com.ileeds.wwf.model.post.PlayerPost;
 import com.ileeds.wwf.repository.PlayerRepository;
 import java.util.List;
@@ -14,6 +15,9 @@ public class PlayerService {
   public static class PlayerExistsException extends Exception {
   }
 
+  public static class PlayerDoesNotExistException extends Exception {
+  }
+
   public static class RoomDoesNotExistException extends Exception {
   }
 
@@ -23,8 +27,12 @@ public class PlayerService {
   @Autowired
   private RoomService roomService;
 
+  @Autowired
+  private SynchronizedPlayerService synchronizedPlayerService;
+
   public PlayerCached createPlayer(String roomKey, PlayerPost playerPost)
-      throws PlayerExistsException, RoomDoesNotExistException {
+      throws PlayerExistsException, RoomDoesNotExistException,
+      SynchronizedPlayerService.RoomFullException {
     assert roomKey != null;
     assert playerPost != null;
 
@@ -38,17 +46,27 @@ public class PlayerService {
       throw new PlayerExistsException();
     }
 
-    final var player = this.playerRepository.save(
-        PlayerCached.builder().key(playerPost.key()).roomKey(roomKey).build());
-    this.roomService.publish(player.roomKey());
+    final var player = this.synchronizedPlayerService.addPlayerToRoom(roomKey, playerPost);
+    this.roomService.publish(player.getRoomKey());
+    return player;
+  }
+
+  public PlayerCached updatePlayer(String roomKey, String playerKey, PlayerPatch playerPatch)
+      throws PlayerDoesNotExistException, SynchronizedPlayerService.ColorSelectedException {
+    assert roomKey != null;
+    assert playerKey != null;
+    assert playerPatch != null;
+
+    final var player = this.synchronizedPlayerService.updatePlayer(roomKey, playerKey, playerPatch);
+    this.roomService.publish(player.getRoomKey());
     return player;
   }
 
   public void deletePlayer(PlayerCached player) {
     assert player != null;
 
-    this.playerRepository.delete(player);
-    this.roomService.publish(player.roomKey());
+    this.synchronizedPlayerService.deletePlayer(player.getRoomKey(), player);
+    this.roomService.publish(player.getRoomKey());
   }
 
   public Optional<PlayerCached> findPlayer(String playerKey) {

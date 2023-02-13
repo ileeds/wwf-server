@@ -1,10 +1,13 @@
 package com.ileeds.wwf.service;
 
+import com.ileeds.wwf.model.cache.PlayerCached;
 import com.ileeds.wwf.model.cache.RoomCached;
 import com.ileeds.wwf.model.post.RoomPost;
 import com.ileeds.wwf.model.socket.RoomSocket;
 import com.ileeds.wwf.repository.PlayerRepository;
 import com.ileeds.wwf.repository.RoomRepository;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -16,6 +19,9 @@ public class RoomService {
 
   public static class RoomExistsException extends Exception {
   }
+
+  public static final List<PlayerCached.PlayerColor> ALL_COLORS =
+      Arrays.asList(PlayerCached.PlayerColor.values());
 
   @Autowired
   @Lazy
@@ -55,7 +61,8 @@ public class RoomService {
 
     final var players = this.playerRepository.findAllByRoomKey(roomKey);
     final var roomSocket = RoomSocket.builder().key(roomKey)
-        .players(players.stream().map(player -> new RoomSocket.PlayerSocket(player.key())).toList())
+        .players(players.stream().map(RoomSocket.PlayerSocket::fromPlayerCached).toList())
+        .colors(RoomService.ALL_COLORS)
         .build();
     this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms/%s", roomKey),
         roomSocket);

@@ -27,7 +27,7 @@ public class PlayerSessionService {
     }
 
     return this.playerSessionRepository.save(
-        PlayerSessionCached.builder().id(sessionId).playerKey(playerCached.key()).build());
+        PlayerSessionCached.builder().id(sessionId).playerKey(playerCached.getKey()).build());
   }
 
   public Optional<PlayerSessionCached> findPlayerSession(String sessionId) {

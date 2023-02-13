@@ -52,7 +52,7 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
           return null;
         }
 
-        if (!player.get().roomKey().equals(roomKey)) {
+        if (!player.get().getRoomKey().equals(roomKey)) {
           return null;
         }
 
@@ -68,7 +68,7 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
           final var player = this.playerService.findPlayer(session.playerKey());
           player.ifPresent(p -> {
             this.playerService.deletePlayer(p);
-            final var roomKey = p.roomKey();
+            final var roomKey = p.getRoomKey();
             final var remainingPlayers = this.playerService.findAllByRoomKey(roomKey);
             if (remainingPlayers.isEmpty()) {
               this.roomService.deleteRoom(roomKey);
