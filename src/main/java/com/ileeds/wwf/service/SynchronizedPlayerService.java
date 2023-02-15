@@ -98,7 +98,10 @@ public class SynchronizedPlayerService {
   @DistributedLock
   public void deletePlayer(@DistributedLockKey String roomKey, PlayerCached player) {
     this.playerRepository.delete(player);
-    this.setPlayerPositions(this.playerRepository.findAllByRoomKey(roomKey));
+    final var players = this.playerRepository.findAllByRoomKey(roomKey);
+    if (players.size() > 0) {
+      this.setPlayerPositions(players);
+    }
   }
 
   private void setPlayerPositions(List<PlayerCached> players) {

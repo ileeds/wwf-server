@@ -65,7 +65,7 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
         final var simpSessionId = (String) accessor.getHeader("simpSessionId");
         this.playerSessionService.findPlayerSession(simpSessionId).ifPresent(session -> {
           this.playerSessionService.deletePlayerSession(session);
-          final var player = this.playerService.findPlayer(session.playerKey());
+          final var player = this.playerService.findPlayer(session.getPlayerKey());
           player.ifPresent(p -> {
             this.playerService.deletePlayer(p);
             final var roomKey = p.getRoomKey();
