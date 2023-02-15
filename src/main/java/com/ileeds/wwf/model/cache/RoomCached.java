@@ -8,7 +8,7 @@ import lombok.extern.jackson.Jacksonized;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
 
-@RedisHash("room")
+@RedisHash(value = "room", timeToLive = 86400)
 @Jacksonized
 @Getter
 @Setter

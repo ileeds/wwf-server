@@ -46,6 +46,9 @@ public class RoomService {
   @Autowired
   private PlayerRepository playerRepository;
 
+  @Autowired
+  private GameService gameService;
+
   public RoomCached createRoom(RoomPost roomPost) throws RoomExistsException {
     assert roomPost != null;
 
@@ -72,8 +75,9 @@ public class RoomService {
         if (players.size() < 2) {
           throw new RoomCannotStartException();
         }
-        room.setStatus(status);
+        this.gameService.startGame(roomKey);
       }
+      room.setStatus(status);
     }
 
     return this.roomRepository.save(room);
