@@ -1,10 +1,13 @@
 package com.ileeds.wwf.service;
 
-import com.ileeds.wwf.model.socket.GameSocket;
 import java.util.concurrent.ExecutionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.messaging.converter.StringMessageConverter;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
@@ -16,6 +19,8 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 @Service
 public class GameService {
 
+  private static final Logger logger = LoggerFactory.getLogger(GameService.class);
+
   private static final class GameSessionHandler extends StompSessionHandlerAdapter {
     private final String roomKey;
 
@@ -25,17 +30,37 @@ public class GameService {
 
     @Override
     public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
-      session.subscribe(String.format("/topic/rooms/%s/game/actions", this.roomKey), this);
+      session.subscribe(String.format("/topic/rooms.%s.game.actions", this.roomKey), this);
     }
 
     @Override
     public void handleFrame(StompHeaders headers, Object payload) {
-      var todo = 1;
+      assert payload != null;
+
+      logger.info(payload.toString());
+//      this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms.%s.game", roomKey),
+//          gameSocket);
+    }
+
+    @Override
+    public void handleTransportError(StompSession session, Throwable exception) {
+      logger.error("handleTransportError", exception);
+    }
+
+    @Override
+    public void handleException(StompSession session, StompCommand command, StompHeaders headers,
+                                byte[] payload, Throwable exception) {
+      logger.error("handleException", exception);
     }
   }
 
-  private static final WebSocketStompClient STOMP_CLIENT =
-      new WebSocketStompClient(new StandardWebSocketClient());
+  private static final WebSocketStompClient STOMP_CLIENT;
+
+  static {
+    final var stompClient = new WebSocketStompClient(new StandardWebSocketClient());
+    stompClient.setMessageConverter(new StringMessageConverter());
+    STOMP_CLIENT = stompClient;
+  }
 
   @Autowired
   @Lazy
@@ -55,14 +80,5 @@ public class GameService {
     //noinspection StatementWithEmptyBody
     while (stompSession.isConnected()) {
     }
-  }
-
-  public void publish(String roomKey) {
-    assert roomKey != null;
-
-    final var gameSocket = GameSocket.builder()
-        .build();
-    this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms/%s/game", roomKey),
-        gameSocket);
   }
 }

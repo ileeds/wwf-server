@@ -103,7 +103,7 @@ public class RoomService {
         .players(players.stream().map(RoomSocket.PlayerSocket::fromPlayerCached).toList())
         .colors(RoomService.ALL_COLORS)
         .build();
-    this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms/%s", roomKey),
+    this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms.%s", roomKey),
         roomSocket);
   }
 }
