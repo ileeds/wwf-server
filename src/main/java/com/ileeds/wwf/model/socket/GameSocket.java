@@ -4,12 +4,13 @@ import lombok.Builder;
 import lombok.extern.jackson.Jacksonized;
 
 @Jacksonized
-public record GameSocket(Board board) {
+public record GameSocket(String[][] board, int countdown, GameState gameState, String winnerKey) {
   @Builder
   public GameSocket {
   }
 
-  // 50x50
-  public record Board() {
+  public enum GameState {
+    GOING,
+    DONE
   }
 }
