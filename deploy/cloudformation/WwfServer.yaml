@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  WwfServerApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      Description: AWS Elastic Beanstalk WWF Application
+  WwfServerConfigurationTemplate:
+    Type: AWS::ElasticBeanstalk::ConfigurationTemplate
+    Properties:
+      ApplicationName:
+        Ref: WwfServerApplication
+      Description: AWS ElasticBeanstalk WWF Configuration Template
+      OptionSettings:
+        - Namespace: aws:elasticbeanstalk:command
+          OptionName: DeploymentPolicy
+          Value: Rolling
+        - Namespace: aws:autoscaling:asg
+          OptionName: MinSize
+          Value: 2
+        - Namespace: aws:autoscaling:asg
+          OptionName: MaxSize
+          Value: 6
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: LoadBalanced
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref WwfServerInstanceProfile
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_PROFILES_ACTIVE
+          Value: production
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: EC2KeyName
+          Value: aws-eb
+        - Namespace: aws:elb:listener:443
+          OptionName: ListenerProtocol
+          Value: HTTPS
+        - Namespace: aws:elb:listener:443
+          OptionName: InstancePort
+          Value: 80
+        - Namespace: aws:elb:listener:443
+          OptionName: InstanceProtocol
+          Value: HTTP
+        - Namespace: aws:elb:listener:443
+          OptionName: SSLCertificateId
+          Value: arn:aws:acm:us-east-1:895339510044:certificate/fe50f7eb-f8db-4f66-bd92-380390c4c502
+      SolutionStackName: 64bit Amazon Linux 2 v3.4.4 running Corretto 17
+  WwfServerEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName:
+        Ref: WwfServerApplication
+      Description: AWS ElasticBeanstalk WWF Environment
+      TemplateName:
+        Ref: WwfServerConfigurationTemplate
+  WwfServerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: Beanstalk EC2 role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+  WwfServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WwfServerInstanceRole
+  WwfServerCacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for WWF server cache.
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: sg-0c51dac9d24a858e3
+          Description: WWF EB server
+      VpcId: vpc-4e51dd34
+  WwfServerCache:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      AutoMinorVersionUpgrade: false
+      CacheNodeType: cache.t2.micro
+      NumCacheNodes: 1
+      Engine: redis
+      EngineVersion: 7.0
+      VpcSecurityGroupIds:
+        - !GetAtt WwfServerCacheSecurityGroup.GroupId
+  WwfServerBrokerSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: WwfServerBrokerSecret
+      Description: WWF broker credentials.
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "wwf"}'
+        GenerateStringKey: password
+        PasswordLength: 30
+        ExcludePunctuation: true
+  WwfServerBrokerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for WWF server broker.
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 61614
+          ToPort: 61614
+          SourceSecurityGroupId: sg-0c51dac9d24a858e3
+          Description: WWF EB server
+      VpcId: vpc-4e51dd34
+  WwfServerBroker:
+    Type: AWS::AmazonMQ::Broker
+    DependsOn: WwfServerBrokerSecret
+    Properties:
+      AutoMinorVersionUpgrade: false
+      BrokerName: WwfActiveMqBroker
+      DeploymentMode: SINGLE_INSTANCE
+      EngineType: ACTIVEMQ
+      EngineVersion: 5.17.2
+      HostInstanceType: mq.t3.micro
+      PubliclyAccessible: false
+      SecurityGroups:
+        - !GetAtt WwfServerBrokerSecurityGroup.GroupId
+      Users:
+        - Password: '{{resolve:secretsmanager:WwfServerBrokerSecret:SecretString:password}}'
+          Username: '{{resolve:secretsmanager:WwfServerBrokerSecret:SecretString:username}}'
+  WwfServerDns:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneName: wormswithfriends.com.
+      RecordSets:
+        - Name: server.wormswithfriends.com.
+          Type: CNAME
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt WwfServerEnvironment.EndpointURL
+        - Name: cache.wormswithfriends.com.
+          Type: CNAME
+          TTL: 300
+          ResourceRecords:
+            - !GetAtt WwfServerCache.RedisEndpoint.Address
+        - Name: broker.wormswithfriends.com.
+          Type: CNAME
+          TTL: 300
+          ResourceRecords:
+            - !Select [ 0, !Split [ ":", !Select [ 1, !Split [ "//", !Select [ 0, !GetAtt WwfServerBroker.StompEndpoints ] ] ] ] ]

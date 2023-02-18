@@ -1,0 +1,11 @@
+spring.profiles.active: test
+
+server.port: 8080
+
+redis:
+  hostname: test
+
+broker:
+  hostname: test
+  port: 61613
+  secure: false

@@ -18,6 +18,7 @@ import lombok.Builder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.converter.StringMessageConverter;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -34,6 +35,8 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 public class GameService {
 
   private static final Logger logger = LoggerFactory.getLogger(GameService.class);
+
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private enum PlayerState {
     VROOM,
@@ -156,12 +159,13 @@ public class GameService {
 
     public GameSessionHandler(SimpMessagingTemplate simpMessagingTemplate,
                               String roomKey,
-                              List<PlayerCached> players) {
+                              List<PlayerCached> players,
+                              ObjectMapper objectMapper) {
       this.timer = new Timer();
       this.roomKey = roomKey;
       this.gameStateEmitter =
           new GameStateEmitter(timer, simpMessagingTemplate, this.roomKey, players);
-      this.objectMapper = new ObjectMapper();
+      this.objectMapper = objectMapper;
     }
 
     @Override
@@ -212,6 +216,9 @@ public class GameService {
   @Autowired
   private PlayerRepository playerRepository;
 
+  @Value("${server.port}")
+  private String serverPort;
+
   @Async
   public void startGame(String roomKey) {
     final var players = this.playerRepository.findAllByRoomKey(roomKey);
@@ -219,8 +226,13 @@ public class GameService {
     final StompSession stompSession;
     try {
       stompSession =
-          GameService.STOMP_CLIENT.connectAsync("ws://localhost:8080/ws",
-                  new GameSessionHandler(this.simpMessagingTemplate, roomKey, players))
+          GameService.STOMP_CLIENT.connectAsync(
+                  String.format("ws://127.0.0.1:%s/ws", this.serverPort),
+                  new GameSessionHandler(
+                      this.simpMessagingTemplate,
+                      roomKey,
+                      players,
+                      GameService.MAPPER))
               .get();
     } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(e);

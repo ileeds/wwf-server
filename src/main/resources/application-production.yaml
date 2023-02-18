@@ -1,0 +1,9 @@
+server.port: 5000
+
+redis:
+  hostname: cache.wormswithfriends.com
+
+broker:
+  hostname: broker.wormswithfriends.com
+  port: 61614
+  secure: true

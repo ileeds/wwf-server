@@ -5,8 +5,9 @@ import com.ileeds.wwf.service.PlayerSessionService;
 import com.ileeds.wwf.service.RoomService;
 import java.util.Map;
 import java.util.Objects;
-import lombok.Value;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,16 +21,21 @@ import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.stomp.StompReactorNettyCodec;
 import org.springframework.messaging.support.AbstractSubscribableChannel;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.messaging.tcp.reactor.ReactorNettyTcpClient;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 import org.springframework.web.socket.server.HandshakeInterceptor;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -54,12 +60,9 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
     }
   }
 
-  @Value
-  private static class CustomChannelInterceptor implements ChannelInterceptor {
-
-    PlayerService playerService;
-    PlayerSessionService playerSessionService;
-    RoomService roomService;
+  private record CustomChannelInterceptor(PlayerService playerService,
+                                          PlayerSessionService playerSessionService,
+                                          RoomService roomService) implements ChannelInterceptor {
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -125,23 +128,58 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
   @Autowired
   private RoomService roomService;
 
+  @Autowired
+  private BrokerConfiguration brokerConfiguration;
+
+  @Value("${spring.profiles.active}")
+  private String activeProfile;
+
   @Override
   public void configureMessageBroker(MessageBrokerRegistry registry) {
-    registry
+    final var tcpClient = new ReactorNettyTcpClient<>(configurer -> {
+      if (this.brokerConfiguration.isSecure()) {
+        configurer = configurer.secure();
+      }
+      return configurer.host(this.brokerConfiguration.getHostname())
+          .port(this.brokerConfiguration.getPort());
+    }, new StompReactorNettyCodec());
+
+    final var stompBrokerRelay = registry
         .setApplicationDestinationPrefixes("/app")
         .enableStompBrokerRelay("/topic")
-        .setRelayHost("localhost")
-        .setRelayPort(61613)
-        .setClientLogin("guest")
-        .setClientPasscode("guest");
+        .setAutoStartup(true)
+        .setTcpClient(tcpClient);
+
+    if (!this.activeProfile.equals("local") && !this.activeProfile.equals("test")) {
+      final var secretsClient = SecretsManagerClient.builder()
+          .credentialsProvider(DefaultCredentialsProvider.create())
+          .build();
+
+      final var valueRequest = GetSecretValueRequest.builder()
+          .secretId("WwfServerBrokerSecret")
+          .build();
+      final var valueResponse = secretsClient.getSecretValue(valueRequest);
+      final var secret = valueResponse.secretString();
+
+      final var jsonSecret = new JSONObject(secret);
+      final var username = jsonSecret.getString("username");
+      final var password = jsonSecret.getString("password");
+      stompBrokerRelay.setClientLogin(username).setClientPasscode(password)
+          .setSystemLogin(username).setSystemPasscode(password);
+
+      secretsClient.close();
+    }
   }
 
   @Override
   public void registerStompEndpoints(StompEndpointRegistry registry) {
     registry.addEndpoint("/ws").addInterceptors(new IpHandshakeInterceptor())
-        .setAllowedOriginPatterns("http://localhost:3000");
+        .setAllowedOriginPatterns("http://localhost:3000", "https://wormswithfriends.com",
+            "https://www.wormswithfriends.com");
     registry.addEndpoint("/ws").addInterceptors(new IpHandshakeInterceptor())
-        .setAllowedOriginPatterns("http://localhost:3000").withSockJS();
+        .setAllowedOriginPatterns("http://localhost:3000", "https://wormswithfriends.com",
+            "https://www.wormswithfriends.com")
+        .withSockJS();
   }
 
   @Override

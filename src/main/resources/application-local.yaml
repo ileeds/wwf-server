@@ -1,0 +1,9 @@
+server.port: 8080
+
+redis:
+  hostname: localhost
+
+broker:
+  hostname: localhost
+  port: 61613
+  secure: false
