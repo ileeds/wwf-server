@@ -1,0 +1,1 @@
+web: java -javaagent:newrelic.jar -jar wwf.jar

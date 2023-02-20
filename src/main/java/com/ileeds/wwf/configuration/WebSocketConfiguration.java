@@ -6,6 +6,8 @@ import com.ileeds.wwf.service.RoomService;
 import java.util.Map;
 import java.util.Objects;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationListener;
@@ -41,6 +43,8 @@ import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueReques
 @EnableWebSocketMessageBroker
 @Order(Ordered.HIGHEST_PRECEDENCE + 99)
 public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer {
+
+  private static final Logger logger = LoggerFactory.getLogger(WebSocketConfiguration.class);
 
   private static final String REMOTE_ADDRESS_ATTRIBUTE = "remoteAddress";
 
@@ -84,16 +88,19 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
 
         final var player = this.playerService.findPlayer(playerKey);
         if (player.isEmpty()) {
+          logger.warn("Reject connection - player not found");
           return null;
         }
 
         if (!player.get().getRoomKey().equals(roomKey)) {
+          logger.warn("Reject connection - player room key mismatch");
           return null;
         }
 
         try {
           this.playerSessionService.setPlayerSession(simpSessionId, player.get());
         } catch (PlayerSessionService.SessionExistsException e) {
+          logger.warn("Reject connection - session already exists");
           return null;
         }
       } else if (StompCommand.DISCONNECT.equals(accessor.getCommand())) {
