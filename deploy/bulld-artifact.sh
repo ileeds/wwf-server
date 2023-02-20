@@ -4,6 +4,7 @@ cd "$(dirname "$0")" || exit 1
 cp -p ../target/wwf.jar artifact
 cp -p ../target/newrelic/newrelic.jar artifact
 cp -p ../target/newrelic/newrelic.yml artifact
+cp -rp ../.ebextensions artifact
 
 NEW_RELIC_APP_NAME="WWF Server"
 NEW_RELIC_LICENSE_KEY=$(aws secretsmanager get-secret-value --secret-id NewRelicLicenseKey | jq -r '.SecretString' | jq -r '.value')

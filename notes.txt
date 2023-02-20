@@ -1,0 +1,6 @@
+mvn clean package
+./deploy/bulld-artifact.sh
+eb deploy
+
+deploy:
+  artifact: deploy/wwf.zip

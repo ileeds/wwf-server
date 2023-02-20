@@ -163,7 +163,7 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
           .build();
 
       final var valueRequest = GetSecretValueRequest.builder()
-          .secretId("WwfServerBrokerSecret")
+          .secretId("BrokerSecret")
           .build();
       final var valueResponse = secretsClient.getSecretValue(valueRequest);
       final var secret = valueResponse.secretString();

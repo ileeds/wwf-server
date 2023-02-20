@@ -1,14 +1,14 @@
 AWSTemplateFormatVersion: 2010-09-09
 Resources:
-  WwfServerApplication:
+  Application:
     Type: AWS::ElasticBeanstalk::Application
     Properties:
       Description: AWS Elastic Beanstalk WWF Application
-  WwfServerConfigurationTemplate:
+  ConfigurationTemplate:
     Type: AWS::ElasticBeanstalk::ConfigurationTemplate
     Properties:
       ApplicationName:
-        Ref: WwfServerApplication
+        Ref: Application
       Description: AWS ElasticBeanstalk WWF Configuration Template
       OptionSettings:
         - Namespace: aws:elasticbeanstalk:command
@@ -25,35 +25,41 @@ Resources:
           Value: LoadBalanced
         - Namespace: aws:autoscaling:launchconfiguration
           OptionName: IamInstanceProfile
-          Value: !Ref WwfServerInstanceProfile
+          Value: !Ref InstanceProfile
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: SPRING_PROFILES_ACTIVE
           Value: production
         - Namespace: aws:autoscaling:launchconfiguration
           OptionName: EC2KeyName
           Value: aws-eb
-        - Namespace: aws:elb:listener:443
-          OptionName: ListenerProtocol
-          Value: HTTPS
-        - Namespace: aws:elb:listener:443
-          OptionName: InstancePort
-          Value: 80
-        - Namespace: aws:elb:listener:443
-          OptionName: InstanceProtocol
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: Port
+          Value: 8080
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: HealthCheckPath
+          Value: /actuator/health
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: LoadBalancerType
+          Value: application
+        - Namespace: aws:elbv2:listener:80
+          OptionName: Protocol
           Value: HTTP
-        - Namespace: aws:elb:listener:443
-          OptionName: SSLCertificateId
+        - Namespace: aws:elbv2:listener:443
+          OptionName: Protocol
+          Value: HTTPS
+        - Namespace: aws:elbv2:listener:443
+          OptionName: SSLCertificateArns
           Value: arn:aws:acm:us-east-1:895339510044:certificate/fe50f7eb-f8db-4f66-bd92-380390c4c502
       SolutionStackName: 64bit Amazon Linux 2 v3.4.4 running Corretto 17
-  WwfServerEnvironment:
+  Environment:
     Type: AWS::ElasticBeanstalk::Environment
     Properties:
       ApplicationName:
-        Ref: WwfServerApplication
+        Ref: Application
       Description: AWS ElasticBeanstalk WWF Environment
       TemplateName:
-        Ref: WwfServerConfigurationTemplate
-  WwfServerInstanceRole:
+        Ref: ConfigurationTemplate
+  InstanceRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -71,12 +77,12 @@ Resources:
         - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
         - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
         - arn:aws:iam::aws:policy/SecretsManagerReadWrite
-  WwfServerInstanceProfile:
+  InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles:
-        - !Ref WwfServerInstanceRole
-  WwfServerCacheSecurityGroup:
+        - !Ref InstanceRole
+  CacheSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for WWF server cache.
@@ -84,10 +90,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 6379
           ToPort: 6379
-          SourceSecurityGroupId: sg-0c51dac9d24a858e3
+          SourceSecurityGroupId: sg-0f48ef4c36e7ab01f
           Description: WWF EB server
       VpcId: vpc-4e51dd34
-  WwfServerCache:
+  Cache:
     Type: AWS::ElastiCache::CacheCluster
     Properties:
       AutoMinorVersionUpgrade: false
@@ -96,18 +102,18 @@ Resources:
       Engine: redis
       EngineVersion: 7.0
       VpcSecurityGroupIds:
-        - !GetAtt WwfServerCacheSecurityGroup.GroupId
-  WwfServerBrokerSecret:
+        - !GetAtt CacheSecurityGroup.GroupId
+  BrokerSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: WwfServerBrokerSecret
+      Name: BrokerSecret
       Description: WWF broker credentials.
       GenerateSecretString:
         SecretStringTemplate: '{"username": "wwf"}'
         GenerateStringKey: password
         PasswordLength: 30
         ExcludePunctuation: true
-  WwfServerBrokerSecurityGroup:
+  BrokerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for WWF server broker.
@@ -115,12 +121,12 @@ Resources:
         - IpProtocol: tcp
           FromPort: 61614
           ToPort: 61614
-          SourceSecurityGroupId: sg-0c51dac9d24a858e3
+          SourceSecurityGroupId: sg-0f48ef4c36e7ab01f
           Description: WWF EB server
       VpcId: vpc-4e51dd34
-  WwfServerBroker:
+  Broker:
     Type: AWS::AmazonMQ::Broker
-    DependsOn: WwfServerBrokerSecret
+    DependsOn: BrokerSecret
     Properties:
       AutoMinorVersionUpgrade: false
       BrokerName: WwfActiveMqBroker
@@ -130,11 +136,11 @@ Resources:
       HostInstanceType: mq.t3.micro
       PubliclyAccessible: false
       SecurityGroups:
-        - !GetAtt WwfServerBrokerSecurityGroup.GroupId
+        - !GetAtt BrokerSecurityGroup.GroupId
       Users:
-        - Password: '{{resolve:secretsmanager:WwfServerBrokerSecret:SecretString:password}}'
-          Username: '{{resolve:secretsmanager:WwfServerBrokerSecret:SecretString:username}}'
-  WwfServerDns:
+        - Password: '{{resolve:secretsmanager:BrokerSecret:SecretString:password}}'
+          Username: '{{resolve:secretsmanager:BrokerSecret:SecretString:username}}'
+  Dns:
     Type: AWS::Route53::RecordSetGroup
     Properties:
       HostedZoneName: wormswithfriends.com.
@@ -143,14 +149,14 @@ Resources:
           Type: CNAME
           TTL: 300
           ResourceRecords:
-            - !GetAtt WwfServerEnvironment.EndpointURL
+            - !GetAtt Environment.EndpointURL
         - Name: cache.wormswithfriends.com.
           Type: CNAME
           TTL: 300
           ResourceRecords:
-            - !GetAtt WwfServerCache.RedisEndpoint.Address
+            - !GetAtt Cache.RedisEndpoint.Address
         - Name: broker.wormswithfriends.com.
           Type: CNAME
           TTL: 300
           ResourceRecords:
-            - !Select [ 0, !Split [ ":", !Select [ 1, !Split [ "//", !Select [ 0, !GetAtt WwfServerBroker.StompEndpoints ] ] ] ] ]
+            - !Select [ 0, !Split [ ":", !Select [ 1, !Split [ "//", !Select [ 0, !GetAtt Broker.StompEndpoints ] ] ] ] ]
