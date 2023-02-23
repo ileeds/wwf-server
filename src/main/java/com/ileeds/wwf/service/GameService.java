@@ -3,6 +3,7 @@ package com.ileeds.wwf.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ileeds.wwf.model.cache.PlayerCached;
+import com.ileeds.wwf.model.post.PlayerPost;
 import com.ileeds.wwf.model.socket.GameAction;
 import com.ileeds.wwf.model.socket.GameSocket;
 import com.ileeds.wwf.repository.PlayerRepository;
@@ -64,8 +65,6 @@ public class GameService {
 
   private static final class GameStateEmitter extends TimerTask {
 
-    private static final int DIMENSION = 50;
-
     private final Timer timer;
     private final SimpMessagingTemplate simpMessagingTemplate;
     private final String roomKey;
@@ -87,7 +86,7 @@ public class GameService {
           .map(player -> Map.entry(player.getKey(), PlayerSocketState.fromPlayerCached(player)))
           .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-      this.board = new String[DIMENSION][DIMENSION];
+      this.board = new String[50][50];
       players.forEach(player -> {
         final var position = player.getPosition();
         this.board[position.y][position.x] = player.getKey();
@@ -102,9 +101,9 @@ public class GameService {
           (int) (3 - Math.min(3, (new Date().getTime() - this.start.getTime()) / 1000));
 
       if (countdown == 0) {
-        this.playerByKey.values().stream()
+        final var playerKeyByPosition = this.playerByKey.values().stream()
             .filter(player -> player.state.equals(PlayerState.VROOM))
-            .forEach(player -> {
+            .map(player -> {
               final var position = player.position;
               final var direction = player.direction;
 
@@ -118,13 +117,26 @@ public class GameService {
               }
               player.position = newPosition;
 
-              if (player.position.x < 0 || player.position.y < 0 || player.position.x >= DIMENSION
-                  || player.position.y >= DIMENSION) {
+              if (player.position.x < 0 || player.position.y < 0 || player.position.x >= 50
+                  || player.position.y >= 50) {
                 player.state = PlayerState.CRASHED;
               } else {
-                this.board[player.position.y][player.position.x] = player.key;
+                if (this.board[player.position.y][player.position.x] != null) {
+                  this.board[player.position.y][player.position.x] = PlayerPost.COLLISION_KEY;
+                  player.state = PlayerState.CRASHED;
+                } else {
+                  this.board[player.position.y][player.position.x] = player.key;
+                }
               }
-            });
+              return Map.entry(String.format("%d_%d", newPosition.x, newPosition.y), player.key);
+            }).collect(Collectors.groupingBy(Map.Entry::getKey));
+
+        playerKeyByPosition.entrySet().stream().filter(entry -> entry.getValue().size() > 1)
+            .forEach(entry -> entry.getValue().forEach(playerKeyEntry -> {
+              final var player = this.playerByKey.get(playerKeyEntry.getValue());
+              player.state = PlayerState.CRASHED;
+              this.board[player.position.y][player.position.x] = PlayerPost.COLLISION_KEY;
+            }));
       }
 
       final var livePlayers = this.playerByKey.values().stream()

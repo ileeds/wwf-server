@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class PlayerService {
 
+  public static class InvalidPlayerKeyException extends Exception {
+  }
+
   public static class PlayerExistsException extends Exception {
   }
 
@@ -32,9 +35,13 @@ public class PlayerService {
 
   public PlayerCached createPlayer(String roomKey, PlayerPost playerPost)
       throws PlayerExistsException, RoomDoesNotExistException,
-      SynchronizedPlayerService.RoomFullException {
+      SynchronizedPlayerService.RoomFullException, InvalidPlayerKeyException {
     assert roomKey != null;
     assert playerPost != null;
+
+    if (playerPost.key().equals(PlayerPost.COLLISION_KEY)) {
+      throw new InvalidPlayerKeyException();
+    }
 
     final var room = this.roomService.findRoom(roomKey);
     if (room.isEmpty()) {

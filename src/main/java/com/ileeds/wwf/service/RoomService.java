@@ -7,6 +7,7 @@ import com.ileeds.wwf.model.post.RoomPost;
 import com.ileeds.wwf.model.socket.RoomSocket;
 import com.ileeds.wwf.repository.PlayerRepository;
 import com.ileeds.wwf.repository.RoomRepository;
+import java.awt.Point;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -99,9 +100,11 @@ public class RoomService {
     assert roomKey != null;
 
     final var players = this.playerRepository.findAllByRoomKey(roomKey);
-    final var roomSocket = RoomSocket.builder().key(roomKey)
+    final var roomSocket = RoomSocket.builder()
+        .key(roomKey)
         .players(players.stream().map(RoomSocket.PlayerSocket::fromPlayerCached).toList())
         .colors(RoomService.ALL_COLORS)
+        .dimensions(new Point(50, 50))
         .build();
     this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms.%s", roomKey),
         roomSocket);

@@ -1,6 +1,9 @@
 START_DIR=$(pwd)
 
 cd "$(dirname "$0")" || exit 1
+cd .. && mvn clean package
+
+cd deploy || exit 1
 cp -p ../target/wwf.jar artifact
 cp -p ../target/newrelic/newrelic.jar artifact
 cp -p ../target/newrelic/newrelic.yml artifact

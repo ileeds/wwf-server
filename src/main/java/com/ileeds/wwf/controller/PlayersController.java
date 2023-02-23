@@ -39,6 +39,8 @@ public class PlayersController {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Room does not exist");
     } catch (SynchronizedPlayerService.RoomFullException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room is full");
+    } catch (PlayerService.InvalidPlayerKeyException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid player key");
     }
     return new RestResponse<>(PlayerResponse.fromPlayerCached(playerCached));
   }

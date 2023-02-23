@@ -9,7 +9,8 @@ import lombok.extern.jackson.Jacksonized;
 @Jacksonized
 public record RoomSocket(String key,
                          List<PlayerSocket> players,
-                         List<PlayerCached.PlayerColor> colors) {
+                         List<PlayerCached.PlayerColor> colors,
+                         Point dimensions) {
   @Builder
   public RoomSocket {
   }
