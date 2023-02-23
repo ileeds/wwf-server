@@ -22,6 +22,7 @@ public class PlayerCached {
   private String roomKey;
   private PlayerColor color;
   private Point position;
+  private int score;
 
   public enum PlayerColor {
     RED,

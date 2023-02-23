@@ -6,7 +6,6 @@ import com.ileeds.wwf.model.cache.PlayerCached;
 import com.ileeds.wwf.model.post.PlayerPost;
 import com.ileeds.wwf.model.socket.GameAction;
 import com.ileeds.wwf.model.socket.GameSocket;
-import com.ileeds.wwf.repository.PlayerRepository;
 import java.awt.Point;
 import java.util.Date;
 import java.util.List;
@@ -67,6 +66,7 @@ public class GameService {
 
     private final Timer timer;
     private final SimpMessagingTemplate simpMessagingTemplate;
+    private final PlayerService playerService;
     private final String roomKey;
     private final Date start;
     private final Map<String, PlayerSocketState> playerByKey;
@@ -75,10 +75,12 @@ public class GameService {
 
     private GameStateEmitter(Timer timer,
                              SimpMessagingTemplate simpMessagingTemplate,
+                             PlayerService playerService,
                              String roomKey,
                              List<PlayerCached> players) {
       this.timer = timer;
       this.simpMessagingTemplate = simpMessagingTemplate;
+      this.playerService = playerService;
       this.roomKey = roomKey;
       this.start = new Date();
 
@@ -144,17 +146,25 @@ public class GameService {
       final var gameState =
           livePlayers.size() <= 1 ? GameSocket.GameState.DONE : GameSocket.GameState.GOING;
 
+      final var winnerKey = livePlayers.size() == 1 ? livePlayers.get(0).key : null;
       this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms.%s.game", this.roomKey),
           GameSocket.builder()
               .board(this.board)
               .countdown(countdown)
               .gameState(gameState)
-              .winnerKey(livePlayers.size() == 1 ? livePlayers.get(0).key : null)
+              .winnerKey(winnerKey)
               .build());
 
       if (gameState.equals(GameSocket.GameState.DONE)) {
         this.session.disconnect();
         this.timer.cancel();
+        if (winnerKey != null) {
+          try {
+            this.playerService.playerWon(roomKey, winnerKey);
+          } catch (PlayerService.PlayerDoesNotExistException e) {
+            throw new RuntimeException("Winner does not exist");
+          }
+        }
       }
     }
 
@@ -170,13 +180,15 @@ public class GameService {
     private final ObjectMapper objectMapper;
 
     public GameSessionHandler(SimpMessagingTemplate simpMessagingTemplate,
+                              PlayerService playerService,
                               String roomKey,
                               List<PlayerCached> players,
                               ObjectMapper objectMapper) {
       this.timer = new Timer();
       this.roomKey = roomKey;
       this.gameStateEmitter =
-          new GameStateEmitter(timer, simpMessagingTemplate, this.roomKey, players);
+          new GameStateEmitter(timer, simpMessagingTemplate, playerService,
+              this.roomKey, players);
       this.objectMapper = objectMapper;
     }
 
@@ -226,14 +238,14 @@ public class GameService {
   private SimpMessagingTemplate simpMessagingTemplate;
 
   @Autowired
-  private PlayerRepository playerRepository;
+  private PlayerService playerService;
 
   @Value("${server.port}")
   private String serverPort;
 
   @Async
   public void startGame(String roomKey) {
-    final var players = this.playerRepository.findAllByRoomKey(roomKey);
+    final var players = this.playerService.findAllByRoomKey(roomKey);
 
     final StompSession stompSession;
     try {
@@ -242,6 +254,7 @@ public class GameService {
                   String.format("ws://127.0.0.1:%s/ws", this.serverPort),
                   new GameSessionHandler(
                       this.simpMessagingTemplate,
+                      this.playerService,
                       roomKey,
                       players,
                       GameService.MAPPER))

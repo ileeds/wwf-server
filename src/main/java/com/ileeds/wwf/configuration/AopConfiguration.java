@@ -2,6 +2,7 @@ package com.ileeds.wwf.configuration;
 
 import com.ileeds.wwf.aop.DistributedLock;
 import com.ileeds.wwf.aop.DistributedLockAdvice;
+import com.ileeds.wwf.service.RoomPublisher;
 import org.springframework.aop.PointcutAdvisor;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
@@ -17,9 +18,10 @@ public class AopConfiguration {
 
   @Bean
   @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-  public static PointcutAdvisor distributedLock(RedisLockRegistry redisLockRegistry) {
+  public static PointcutAdvisor distributedLock(RedisLockRegistry redisLockRegistry,
+                                                RoomPublisher roomPublisher) {
     return new DefaultPointcutAdvisor(
         new AnnotationMatchingPointcut(null, DistributedLock.class, false),
-        new DistributedLockAdvice(redisLockRegistry));
+        new DistributedLockAdvice(redisLockRegistry, roomPublisher));
   }
 }

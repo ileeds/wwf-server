@@ -5,6 +5,7 @@ import com.ileeds.wwf.model.post.RoomPatch;
 import com.ileeds.wwf.model.post.RoomPost;
 import com.ileeds.wwf.model.response.RestResponse;
 import com.ileeds.wwf.model.response.RoomResponse;
+import com.ileeds.wwf.service.RoomPublisher;
 import com.ileeds.wwf.service.RoomService;
 import javax.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,13 +28,16 @@ public class RoomsController {
   @Autowired
   private RoomService roomService;
 
+  @Autowired
+  private RoomPublisher roomPublisher;
+
   @GetMapping("/{roomKey}")
   public RestResponse<RoomResponse> getRoom(@PathVariable String roomKey) {
     final var room = this.roomService.findRoom(roomKey);
     if (room.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Room does not exist");
     }
-    this.roomService.publish(roomKey);
+    this.roomPublisher.publish(roomKey);
     return new RestResponse<>(new RoomResponse(roomKey));
   }
 

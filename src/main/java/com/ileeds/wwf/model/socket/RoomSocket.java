@@ -15,14 +15,18 @@ public record RoomSocket(String key,
   public RoomSocket {
   }
 
-  public record PlayerSocket(String key, PlayerCached.PlayerColor color, Point position) {
+  public record PlayerSocket(String key,
+                             PlayerCached.PlayerColor color,
+                             Point position,
+                             int score) {
     public static PlayerSocket fromPlayerCached(PlayerCached playerCached) {
       assert playerCached != null;
 
       return new PlayerSocket(
           playerCached.getKey(),
           playerCached.getColor(),
-          playerCached.getPosition());
+          playerCached.getPosition(),
+          playerCached.getScore());
     }
   }
 }

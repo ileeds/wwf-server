@@ -1,5 +1,6 @@
 package com.ileeds.wwf.aop;
 
+import com.ileeds.wwf.service.RoomPublisher;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -9,9 +10,11 @@ import org.springframework.integration.redis.util.RedisLockRegistry;
 public class DistributedLockAdvice implements MethodInterceptor {
 
   private final RedisLockRegistry redisLockRegistry;
+  private final RoomPublisher roomPublisher;
 
-  public DistributedLockAdvice(RedisLockRegistry redisLockRegistry) {
+  public DistributedLockAdvice(RedisLockRegistry redisLockRegistry, RoomPublisher roomPublisher) {
     this.redisLockRegistry = redisLockRegistry;
+    this.roomPublisher = roomPublisher;
   }
 
   @Override
@@ -24,7 +27,7 @@ public class DistributedLockAdvice implements MethodInterceptor {
         .toArray();
 
     assert lockKeyParameterIndexes.length == 1;
-    final var lockKey = invocation.getArguments()[lockKeyParameterIndexes[0]];
+    final var lockKey = (String) invocation.getArguments()[lockKeyParameterIndexes[0]];
 
     final var lock = this.redisLockRegistry.obtain(lockKey);
     try {
@@ -34,6 +37,7 @@ public class DistributedLockAdvice implements MethodInterceptor {
         throw new RuntimeException("Could not acquire lock");
       }
     } finally {
+      this.roomPublisher.publish(lockKey);
       lock.unlock();
     }
   }

@@ -6,7 +6,6 @@ import com.ileeds.wwf.model.post.PlayerPost;
 import com.ileeds.wwf.model.response.PlayerResponse;
 import com.ileeds.wwf.model.response.RestResponse;
 import com.ileeds.wwf.service.PlayerService;
-import com.ileeds.wwf.service.SynchronizedPlayerService;
 import javax.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -32,12 +31,12 @@ public class PlayersController {
                                                  @Valid @RequestBody PlayerPost playerPost) {
     final PlayerCached playerCached;
     try {
-      playerCached = this.playerService.createPlayer(roomKey, playerPost);
+      playerCached = this.playerService.addPlayerToRoom(roomKey, playerPost);
     } catch (PlayerService.PlayerExistsException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Player already exists");
     } catch (PlayerService.RoomDoesNotExistException e) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Room does not exist");
-    } catch (SynchronizedPlayerService.RoomFullException e) {
+    } catch (PlayerService.RoomFullException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room is full");
     } catch (PlayerService.InvalidPlayerKeyException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid player key");
@@ -54,7 +53,7 @@ public class PlayersController {
       playerCached = this.playerService.updatePlayer(roomKey, playerKey, playerPatch);
     } catch (PlayerService.PlayerDoesNotExistException e) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Player does not exist");
-    } catch (SynchronizedPlayerService.ColorSelectedException e) {
+    } catch (PlayerService.ColorSelectedException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Color is not available");
     }
     return new RestResponse<>(PlayerResponse.fromPlayerCached(playerCached));

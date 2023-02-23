@@ -1,5 +1,6 @@
 package com.ileeds.wwf.configuration;
 
+import com.ileeds.wwf.repository.PlayerRepository;
 import com.ileeds.wwf.service.PlayerService;
 import com.ileeds.wwf.service.PlayerSessionService;
 import com.ileeds.wwf.service.RoomService;
@@ -66,6 +67,7 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
 
   private record CustomChannelInterceptor(PlayerService playerService,
                                           PlayerSessionService playerSessionService,
+                                          PlayerRepository playerRepository,
                                           RoomService roomService) implements ChannelInterceptor {
 
     @Override
@@ -86,7 +88,12 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
         final var roomKey = accessor.getFirstNativeHeader("roomKey");
         final var simpSessionId = (String) accessor.getHeader("simpSessionId");
 
-        final var player = this.playerService.findPlayer(playerKey);
+        if (playerKey == null) {
+          logger.warn("Reject connection - no player key");
+          return null;
+        }
+
+        final var player = this.playerRepository.findById(playerKey);
         if (player.isEmpty()) {
           logger.warn("Reject connection - player not found");
           return null;
@@ -107,10 +114,10 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
         final var simpSessionId = (String) accessor.getHeader("simpSessionId");
         this.playerSessionService.findPlayerSession(simpSessionId).ifPresent(session -> {
           this.playerSessionService.deletePlayerSession(session);
-          final var player = this.playerService.findPlayer(session.getPlayerKey());
+          final var player = this.playerRepository.findById(session.getPlayerKey());
           player.ifPresent(p -> {
-            this.playerService.deletePlayer(p);
             final var roomKey = p.getRoomKey();
+            this.playerRepository.delete(p);
             final var remainingPlayers = this.playerService.findAllByRoomKey(roomKey);
             if (remainingPlayers.isEmpty()) {
               this.roomService.deleteRoom(roomKey);
@@ -131,6 +138,9 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
 
   @Autowired
   private PlayerSessionService playerSessionService;
+
+  @Autowired
+  private PlayerRepository playerRepository;
 
   @Autowired
   private RoomService roomService;
@@ -192,7 +202,9 @@ public class WebSocketConfiguration implements WebSocketMessageBrokerConfigurer 
   @Override
   public void configureClientInboundChannel(ChannelRegistration registration) {
     registration.interceptors(
-        new CustomChannelInterceptor(this.playerService, this.playerSessionService,
+        new CustomChannelInterceptor(this.playerService,
+            this.playerSessionService,
+            this.playerRepository,
             this.roomService));
   }
 
