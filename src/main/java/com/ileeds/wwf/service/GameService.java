@@ -3,8 +3,8 @@ package com.ileeds.wwf.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ileeds.wwf.model.cache.PlayerCached;
-import com.ileeds.wwf.model.post.PlayerPost;
 import com.ileeds.wwf.model.socket.GameAction;
+import com.ileeds.wwf.model.socket.GamePlayerSocket;
 import com.ileeds.wwf.model.socket.GameSocket;
 import java.awt.Point;
 import java.util.Date;
@@ -14,7 +14,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
-import lombok.Builder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,30 +37,6 @@ public class GameService {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private enum PlayerState {
-    VROOM,
-    CRASHED
-  }
-
-  @Builder
-  private static final class PlayerSocketState {
-    private final String key;
-    private Point position;
-    private GameAction.Direction direction;
-    private PlayerState state;
-
-    public static PlayerSocketState fromPlayerCached(PlayerCached playerCached) {
-      assert playerCached != null;
-
-      return PlayerSocketState.builder()
-          .key(playerCached.getKey())
-          .position(playerCached.getPosition())
-          .direction(GameAction.Direction.RIGHT)
-          .state(PlayerState.VROOM)
-          .build();
-    }
-  }
-
   private static final class GameStateEmitter extends TimerTask {
 
     private final Timer timer;
@@ -69,7 +44,7 @@ public class GameService {
     private final PlayerService playerService;
     private final String roomKey;
     private final Date start;
-    private final Map<String, PlayerSocketState> playerByKey;
+    private final Map<String, GamePlayerSocket> playerByKey;
     private final String[][] board;
     private StompSession session;
 
@@ -85,7 +60,7 @@ public class GameService {
       this.start = new Date();
 
       this.playerByKey = players.stream()
-          .map(player -> Map.entry(player.getKey(), PlayerSocketState.fromPlayerCached(player)))
+          .map(player -> Map.entry(player.getKey(), GamePlayerSocket.fromPlayerCached(player)))
           .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
       this.board = new String[50][50];
@@ -104,10 +79,10 @@ public class GameService {
 
       if (countdown == 0) {
         final var playerKeyByPosition = this.playerByKey.values().stream()
-            .filter(player -> player.state.equals(PlayerState.VROOM))
+            .filter(player -> player.getState().equals(GamePlayerSocket.PlayerState.VROOM))
             .map(player -> {
-              final var position = player.position;
-              final var direction = player.direction;
+              final var position = player.getPosition();
+              final var direction = player.getDirection();
 
               final Point newPosition;
               switch (direction) {
@@ -117,42 +92,42 @@ public class GameService {
                 case RIGHT -> newPosition = new Point(position.x + 1, position.y);
                 default -> throw new AssertionError();
               }
-              player.position = newPosition;
+              player.setPosition(newPosition);
 
-              if (player.position.x < 0 || player.position.y < 0 || player.position.x >= 50
-                  || player.position.y >= 50) {
-                player.state = PlayerState.CRASHED;
+              if (newPosition.x < 0 || newPosition.y < 0
+                  || newPosition.x >= 50 || newPosition.y >= 50) {
+                player.setState(GamePlayerSocket.PlayerState.CRASHED);
               } else {
-                if (this.board[player.position.y][player.position.x] != null) {
-                  this.board[player.position.y][player.position.x] = PlayerPost.COLLISION_KEY;
-                  player.state = PlayerState.CRASHED;
+                if (this.board[newPosition.y][newPosition.x] != null) {
+                  player.setState(GamePlayerSocket.PlayerState.CRASHED);
                 } else {
-                  this.board[player.position.y][player.position.x] = player.key;
+                  this.board[newPosition.y][newPosition.x] = player.getKey();
                 }
               }
-              return Map.entry(String.format("%d_%d", newPosition.x, newPosition.y), player.key);
+              return Map.entry(String.format("%d_%d", newPosition.x, newPosition.y),
+                  player.getKey());
             }).collect(Collectors.groupingBy(Map.Entry::getKey));
 
         playerKeyByPosition.entrySet().stream().filter(entry -> entry.getValue().size() > 1)
             .forEach(entry -> entry.getValue().forEach(playerKeyEntry -> {
               final var player = this.playerByKey.get(playerKeyEntry.getValue());
-              player.state = PlayerState.CRASHED;
-              this.board[player.position.y][player.position.x] = PlayerPost.COLLISION_KEY;
+              player.setState(GamePlayerSocket.PlayerState.CRASHED);
             }));
       }
 
       final var livePlayers = this.playerByKey.values().stream()
-          .filter(player -> player.state.equals(PlayerState.VROOM)).toList();
+          .filter(player -> player.getState().equals(GamePlayerSocket.PlayerState.VROOM)).toList();
       final var gameState =
           livePlayers.size() <= 1 ? GameSocket.GameState.DONE : GameSocket.GameState.GOING;
+      final var winnerKey = livePlayers.size() == 1 ? livePlayers.get(0).getKey() : null;
 
-      final var winnerKey = livePlayers.size() == 1 ? livePlayers.get(0).key : null;
       this.simpMessagingTemplate.convertAndSend(String.format("/topic/rooms.%s.game", this.roomKey),
           GameSocket.builder()
               .board(this.board)
               .countdown(countdown)
               .gameState(gameState)
               .winnerKey(winnerKey)
+              .players(this.playerByKey.values())
               .build());
 
       if (gameState.equals(GameSocket.GameState.DONE)) {
@@ -210,8 +185,8 @@ public class GameService {
       } catch (JsonProcessingException e) {
         throw new RuntimeException("Invalid game action");
       }
-      this.gameStateEmitter.playerByKey.get(gameAction.playerKey()).direction =
-          gameAction.direction();
+      this.gameStateEmitter.playerByKey.get(gameAction.playerKey())
+          .setDirection(gameAction.direction());
     }
 
     @Override

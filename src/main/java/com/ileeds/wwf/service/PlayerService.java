@@ -9,17 +9,12 @@ import com.ileeds.wwf.repository.PlayerRepository;
 import com.ileeds.wwf.repository.RoomRepository;
 import java.awt.Point;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PlayerService {
-
-  public static class InvalidPlayerKeyException extends Exception {
-  }
 
   public static class PlayerExistsException extends Exception {
   }
@@ -42,26 +37,6 @@ public class PlayerService {
   @Autowired
   private RoomRepository roomRepository;
 
-  private static final Map<Integer, List<Point>> POINTS_BY_PLAYER_COUNT = Map.of(
-      1, new ArrayList<>() {{
-        add(new Point(24, 24));
-      }},
-      2, new ArrayList<>() {{
-        add(new Point(24, 12));
-        add(new Point(24, 36));
-      }},
-      3, new ArrayList<>() {{
-        add(new Point(12, 12));
-        add(new Point(36, 12));
-        add(new Point(24, 36));
-      }},
-      4, new ArrayList<>() {{
-        add(new Point(12, 12));
-        add(new Point(36, 12));
-        add(new Point(12, 36));
-        add(new Point(36, 36));
-      }});
-
   @DistributedLock
   public List<PlayerCached> findAllByRoomKey(@DistributedLockKey String roomKey) {
     assert roomKey != null;
@@ -71,14 +46,10 @@ public class PlayerService {
 
   @DistributedLock
   public PlayerCached addPlayerToRoom(@DistributedLockKey String roomKey, PlayerPost playerPost)
-      throws RoomFullException, InvalidPlayerKeyException, RoomDoesNotExistException,
+      throws RoomFullException, RoomDoesNotExistException,
       PlayerExistsException {
     assert roomKey != null;
     assert playerPost != null;
-
-    if (playerPost.key().equals(PlayerPost.COLLISION_KEY)) {
-      throw new InvalidPlayerKeyException();
-    }
 
     final var room = this.roomRepository.findById(roomKey);
     if (room.isEmpty()) {
@@ -146,16 +117,27 @@ public class PlayerService {
 
     player.setScore(player.getScore() + 1);
     this.playerRepository.save(player);
+    this.setPlayerPositionsAndSave(this.playerRepository.findAllByRoomKey(roomKey));
   }
 
   private void setPlayerPositionsAndSave(List<PlayerCached> players) {
     assert players != null;
 
-    final var points = PlayerService.POINTS_BY_PLAYER_COUNT.get(players.size());
-    Collections.shuffle(points);
+    final var divisor = (50 / (players.size() + 1));
+    final var xCoordinates = new ArrayList<Integer>();
+    final var yCoordinates = new ArrayList<Integer>();
 
-    for (int i = 0; i < players.size(); i++) {
-      players.get(i).setPosition(points.get(i));
+    var coordinate = divisor;
+    while (coordinate < 50) {
+      xCoordinates.add(coordinate - 1);
+      yCoordinates.add(coordinate - 1);
+      coordinate += divisor;
+    }
+
+    for (PlayerCached player : players) {
+      final var randomX = xCoordinates.remove((int) (Math.random() * (xCoordinates.size() - 1)));
+      final var randomY = yCoordinates.remove((int) (Math.random() * (yCoordinates.size() - 1)));
+      player.setPosition(new Point(randomX, randomY));
     }
     this.playerRepository.saveAll(players);
   }

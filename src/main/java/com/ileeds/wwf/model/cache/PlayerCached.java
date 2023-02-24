@@ -26,8 +26,12 @@ public class PlayerCached {
 
   public enum PlayerColor {
     RED,
+    YELLOW,
     BLUE,
-    FUCHSIA,
-    PURPLE,
+    ORANGE,
+    GREEN,
+    VIOLET,
+    PINK,
+    SIENNA,
   }
 }
