@@ -18,7 +18,8 @@ public record RoomSocket(String key,
   public record PlayerSocket(String key,
                              PlayerCached.PlayerColor color,
                              Point position,
-                             int score) {
+                             int score,
+                             String name) {
     public static PlayerSocket fromPlayerCached(PlayerCached playerCached) {
       assert playerCached != null;
 
@@ -26,7 +27,8 @@ public record RoomSocket(String key,
           playerCached.getKey(),
           playerCached.getColor(),
           playerCached.getPosition(),
-          playerCached.getScore());
+          playerCached.getScore(),
+          playerCached.getName());
     }
   }
 }

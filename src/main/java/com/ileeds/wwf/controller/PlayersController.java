@@ -53,6 +53,8 @@ public class PlayersController {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Player does not exist");
     } catch (PlayerService.ColorSelectedException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Color is not available");
+    } catch (PlayerService.NameSelectedException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name is not available");
     }
     return new RestResponse<>(PlayerResponse.fromPlayerCached(playerCached));
   }

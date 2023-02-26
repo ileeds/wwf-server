@@ -28,6 +28,6 @@ public class CacheConfiguration {
 
   @Bean
   public RedisLockRegistry redisLockRegistry(RedisConnectionFactory redisConnectionFactory) {
-    return new RedisLockRegistry(redisConnectionFactory, "lock");
+    return new RedisLockRegistry(redisConnectionFactory, "lock", 60000);
   }
 }

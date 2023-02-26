@@ -31,6 +31,9 @@ public class PlayerService {
   public static final class ColorSelectedException extends Exception {
   }
 
+  public static final class NameSelectedException extends Exception {
+  }
+
   @Autowired
   private PlayerRepository playerRepository;
 
@@ -62,15 +65,25 @@ public class PlayerService {
     }
 
     final var roomPlayers = this.playerRepository.findAllByRoomKey(roomKey);
+
     final var selectedColors = roomPlayers.stream().map(PlayerCached::getColor).toList();
     final var color =
         RoomService.ALL_COLORS.stream().filter(elem -> !selectedColors.contains(elem)).findFirst()
             .orElseThrow(RoomFullException::new);
+
+    String name;
+    final var selectedNames = roomPlayers.stream().map(PlayerCached::getName).toList();
+    var nameCounter = 1;
+    do {
+      name = String.format("Player %d", nameCounter);
+      nameCounter++;
+    } while (selectedNames.contains(name));
     final var newPlayer = PlayerCached.builder()
         .key(playerPost.key())
         .roomKey(roomKey)
         .color(color)
         .score(0)
+        .name(name)
         .build();
     roomPlayers.add(newPlayer);
 
@@ -82,38 +95,56 @@ public class PlayerService {
   public PlayerCached updatePlayer(@DistributedLockKey String roomKey,
                                    String playerKey,
                                    PlayerPatch playerPatch)
-      throws PlayerService.PlayerDoesNotExistException, ColorSelectedException {
+      throws PlayerDoesNotExistException, ColorSelectedException, NameSelectedException {
     assert roomKey != null;
     assert playerKey != null;
     assert playerPatch != null;
 
     final var player =
-        this.playerRepository.findById(playerKey).orElseThrow(
-            PlayerService.PlayerDoesNotExistException::new);
+        this.playerRepository.findById(playerKey).orElseThrow(PlayerDoesNotExistException::new);
 
     final var existingPlayers = this.playerRepository.findAllByRoomKey(player.getRoomKey());
-    final var selectedColors =
-        existingPlayers.stream().filter(p -> !p.getKey().equals(player.getKey()))
-            .map(PlayerCached::getColor).toList();
 
-    if (selectedColors.contains(playerPatch.color())) {
-      throw new ColorSelectedException();
+    if (playerPatch.color().isPresent()) {
+      final var color = playerPatch.color().get();
+
+      final var selectedColors =
+          existingPlayers.stream().filter(p -> !p.getKey().equals(player.getKey()))
+              .map(PlayerCached::getColor).toList();
+
+      if (selectedColors.contains(color)) {
+        throw new ColorSelectedException();
+      }
+
+      player.setColor(color);
     }
 
-    player.setColor(playerPatch.color());
+    if (playerPatch.name().isPresent()) {
+      final var name = playerPatch.name().get();
+
+      final var selectedNames =
+          existingPlayers.stream().filter(p -> !p.getKey().equals(player.getKey()))
+              .map(PlayerCached::getName).toList();
+
+      if (selectedNames.contains(name)) {
+        throw new NameSelectedException();
+      }
+
+      player.setName(name);
+    }
+
     this.playerRepository.save(player);
     return player;
   }
 
   @DistributedLock
   public void playerWon(@DistributedLockKey String roomKey, String winnerKey)
-      throws PlayerService.PlayerDoesNotExistException {
+      throws PlayerDoesNotExistException {
     assert roomKey != null;
     assert winnerKey != null;
 
     final var player =
-        this.playerRepository.findById(winnerKey).orElseThrow(
-            PlayerService.PlayerDoesNotExistException::new);
+        this.playerRepository.findById(winnerKey).orElseThrow(PlayerDoesNotExistException::new);
 
     player.setScore(player.getScore() + 1);
     this.playerRepository.save(player);
